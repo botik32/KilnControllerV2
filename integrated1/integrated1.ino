@@ -227,7 +227,7 @@ enum MenuItems
 struct SubMenu
 {
   short stepId;
-  char vars[8*MAX_STEPS];		// NOTE: make sure to provide enough space to fix MAX_STEPS
+  char vars[6*MAX_STEPS + 8];		// NOTE: make sure to provide enough space to fix MAX_STEPS
 };
 
 union EditSubmenu	// maps into vars[16]
@@ -237,7 +237,7 @@ union EditSubmenu	// maps into vars[16]
     char nextAction; // add/remove/edit
     char subAction;	// for add/edit, it is edit of step type, target temperature and time to reach
     bool executingAction; // whether executing action above
-    int  stepsCount;	// count of steps stored
+    short  stepsCount;	// count of steps stored
     struct TemperatureStep steps[MAX_STEPS];	
   } 
   varsNamed;
@@ -395,8 +395,8 @@ void getCurrentMessage(struct Menu * menu, char **lines)
     strcat(buf[0], "C  ");
     fillLine(buf[0]);
     lines[0] = buf[0];
-    lines[1] = "";
-    lines[2] = "";
+    lines[1] = (char*)"";
+    lines[2] = (char*)"";
     lines[3] = (char*)" <               >E ";
     break;	
   case MENU_EDITSTEPS:
@@ -408,8 +408,8 @@ void getCurrentMessage(struct Menu * menu, char **lines)
       strcat(buf[0], s_editActions[(int)sub->varsNamed.nextAction]);
       fillLine(buf[0]);
       lines[0] = buf[0];
-      lines[1] = "";
-      lines[2] = "";
+      lines[1] = (char*)"";
+      lines[2] = (char*)"";
       if (!sub->varsNamed.executingAction)
       {
         lines[3] = (char*)"M<               >R ";
@@ -460,8 +460,8 @@ void getCurrentMessage(struct Menu * menu, char **lines)
       }
       fillLine(buf[0]);
       lines[0] = buf[0];
-      lines[1] = "";
-      lines[2] = "";
+      lines[1] = (char*)"";
+      lines[2] = (char*)"";
 
       sprintf(buf[3], "E< ");
       writeTemp(tempC, buf[3]+3);

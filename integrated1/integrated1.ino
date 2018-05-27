@@ -2,6 +2,20 @@
 #include <LiquidCrystal_I2C.h>
 #include <max6675.h>
 
+
+// some configuration options
+
+
+
+//#define USE_TWO_PROBES		// using two probes may be a cheap way to achieve better accuracy
+				// We have enough data pins to use two
+
+#define MAX_STEPS 32
+#define COIL_SKIP_FACTOR 0	// 0 for no skip, 1 for 50% skip, 2 for 1/3 skip, N for 1/N+1 skip
+				// Negative values for prevalent skip, e.g. -1 for 50% skip, -2 for 2/3 skip, -N for N/N+1 skip
+				// use this if your coil is too powerful (e.g., 3000w)
+
+
 //////// Start buttons library
 
 // Modify these according to your analog keypad voltages
@@ -131,11 +145,6 @@ struct TemperatureStep
   bool  holdTemp;	// hold or increase 
 };
 
-#define MAX_STEPS 32
-#define COIL_SKIP_FACTOR 0	// 0 for no skip, 1 for 50% skip, 2 for 1/3 skip, N for 1/N+1 skip
-				// Negative values for prevalent skip, e.g. -1 for 50% skip, -2 for 2/3 skip, -N for N/N+1 skip
-				// use this if your coil is too powerful (e.g., 3000w)
-
 static struct TemperatureStep s_configuredSteps[MAX_STEPS];
 static int s_configuredStepsCount = 0;
 
@@ -155,6 +164,7 @@ void resetSteps(struct TemperatureStep *steps)
 
 // temperature sensor goes here
 double tempC = 0;
+double tempArr[2];
 // sliding temp average
 static const int AVG_TEMP_SAMPLES = 50;
 double tempWindow[AVG_TEMP_SAMPLES] = {0.};
@@ -790,11 +800,17 @@ void resetMenu(struct Menu * menu)
 
 
 LiquidCrystal_I2C lcd( 0x27, 20, 4);
-int ktcSO = 8;
-int ktcCS = 9;
-int ktcCLK = 10;
-MAX6675 ktc(ktcCLK, ktcCS, ktcSO);
+int ktc1_SO = 8;
+int ktc1_CS = 9;
+int ktc1_CLK = 10;
+MAX6675 ktc1(ktc1_CLK, ktc1_CS, ktc1_SO);
 
+#ifdef USE_TWO_PROBES
+int ktc2_SO = 5;
+int ktc2_CS = 6;
+int ktc2_CLK = 7;
+MAX6675 ktc2(ktc2_CLK, ktc2_CS, ktc2_SO);
+#endif
 
 struct Menu menu;
 
@@ -813,17 +829,39 @@ void setup()
   resetSteps(&s_configuredSteps[0]);
 }
 
-double readTemp()
+double readTemp(double *tempOut)
 {
   static double s_temp = 0;
+  static double s_temp1 = 0;
+#ifdef USE_TWO_PROBES
+  static double s_temp2 = 0;
+#endif
   static int s_count = 0;
 
   if (s_count == 0)
-    s_temp = ktc.readCelsius();
+  {
+    s_temp1 = ktc1.readCelsius();
+#ifdef USE_TWO_PROBES
+    s_temp2 = ktc2.readCelsius();
+    s_temp = (s_temp1+s_temp2)/2.;
+#else
+    s_temp = s_temp1;
+#endif
+  }
 
   ++s_count;
   if (s_count > 2)
     s_count = 0;
+
+  if (tempOut)
+  {
+    tempOut[0] = s_temp1;
+#ifdef USE_TWO_PROBES
+    tempOut[1] = s_temp2;
+#else
+    tempOut[1] = 0;
+#endif
+  }
 
   return s_temp;
 }
@@ -851,15 +889,18 @@ void loop()
   struct ButtonHit btn = checkButton();
   char * lines[4];
 
-  
-  tempC = readTemp();
+  tempC = readTemp(&tempArr[0]);
   updateTempAverage();
 
-  Serial.print("Deg C = "); 
+  /*Serial.print("Deg C = "); 
   Serial.print(tempC);
   Serial.print("; avg T=");
   Serial.println(tempAverage);
-
+  Serial.print("t1=");
+  Serial.print(tempArr[0]);
+  Serial.print("; t2=");
+  Serial.println(tempArr[1]);
+  */
 
   handleButtons(&menu, btn);
   getCurrentMessage(&menu, &lines[0]);

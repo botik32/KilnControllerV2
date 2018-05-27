@@ -227,7 +227,7 @@ enum MenuItems
 struct SubMenu
 {
   short stepId;
-  char vars[64];		// NOTE: make sure to provide enough space to fix MAX_STEPS
+  char vars[8*MAX_STEPS];		// NOTE: make sure to provide enough space to fix MAX_STEPS
 };
 
 union EditSubmenu	// maps into vars[16]
@@ -241,7 +241,6 @@ union EditSubmenu	// maps into vars[16]
     struct TemperatureStep steps[MAX_STEPS];	
   } 
   varsNamed;
-  char vars[64];
 };
 
 enum EditSubmenuActions

@@ -141,9 +141,11 @@ void fillLine(char *buf)
 struct TemperatureStep
 {
   short targetTemp; // in C
-  short duration;	// seconds
+  unsigned char duration;	// minutes * 5, see DURATION_FACTOR
   bool  holdTemp;	// hold or increase 
-};
+}__attribute__ ((packed));
+
+#define DURATION_FACTOR 5 // 5 mins for duration resolution
 
 static struct TemperatureStep s_configuredSteps[MAX_STEPS];
 static int s_configuredStepsCount = 0;
@@ -239,13 +241,7 @@ enum MenuItems
 };
 
 
-struct SubMenu
-{
-  short stepId;
-  char vars[6*MAX_STEPS + 8];		// NOTE: make sure to provide enough space to fix MAX_STEPS
-};
-
-union EditSubmenu	// maps into vars[16]
+union EditSubmenu	// maps into vars[MAX_STEPS]
 {
   struct
   {
@@ -256,6 +252,12 @@ union EditSubmenu	// maps into vars[16]
     struct TemperatureStep steps[MAX_STEPS];	
   } 
   varsNamed;
+};
+
+struct SubMenu
+{
+  short stepId;
+  char vars[sizeof(EditSubmenu)];    // NOTE: make sure to provide enough space to fit all submenu types
 };
 
 enum EditSubmenuActions
@@ -280,6 +282,11 @@ struct Menu
 };
 
 
+int getStepDuration(const struct TemperatureStep *step)
+{
+  // duration is encoded in increments of 5 minutes
+  return ((int)(step->duration)) * DURATION_FACTOR;
+}
 
 void resetStepsRun(struct Menu * menu)
 {
@@ -307,7 +314,7 @@ void initStep(struct Menu * menu)
     // set initial temp and temp. increase rate
     s_PID.startTemp = tempC;
     struct TemperatureStep * step = &s_configuredSteps[stepId];
-    s_PID.tempIncrementRate = (step->targetTemp - s_PID.startTemp) / (step->duration * 60.f);
+    s_PID.tempIncrementRate = (step->targetTemp - s_PID.startTemp) / (getStepDuration(step) * 60.f);
   }
 }
 
@@ -389,7 +396,7 @@ float runStep(struct Menu * menu)
       }
     }
 
-    if (s_secondsAtStep >= ((unsigned long)curStep->duration)*60)
+    if (s_secondsAtStep >= ((unsigned long)getStepDuration(curStep))*60)
     {
       // move to next step.
       ++stepId;
@@ -459,7 +466,7 @@ void getCurrentMessage(struct Menu * menu, char **lines)
           break;
         case EDITSUBACTION_DURATION:
           ofs = sprintf(buf[3], "Time: " );
-          sprintf(buf[3]+ofs, "%dm", sub->varsNamed.steps[stepId].duration);
+          sprintf(buf[3]+ofs, "%dm", getStepDuration(&sub->varsNamed.steps[stepId]));
           break;
         }
         fillLine(buf[3]);
@@ -484,7 +491,7 @@ void getCurrentMessage(struct Menu * menu, char **lines)
       if (stepId < s_configuredStepsCount)
       {
         struct TemperatureStep * curStep = &s_configuredSteps[stepId];
-        pos += sprintf(buf[0]+pos, "%ld/%dm", s_secondsAtStep/60, curStep->duration);
+        pos += sprintf(buf[0]+pos, "%ld/%dm", s_secondsAtStep/60, getStepDuration(curStep));
         if (!curStep->holdTemp && pos < 14)
           pos += sprintf(buf[0]+pos, " I");
       }
@@ -636,7 +643,7 @@ void handleButtonsEditSteps(struct Menu * menu, struct ButtonHit buttonHit)
         curStep->targetTemp += s_tempIncrement;
       }
       else if (sub->varsNamed.subAction == EDITSUBACTION_DURATION)
-        curStep->duration += 5;
+        curStep->duration ++;
 
       break;
     case KEY_DOWN:
@@ -652,7 +659,7 @@ void handleButtonsEditSteps(struct Menu * menu, struct ButtonHit buttonHit)
         curStep->targetTemp -= s_tempIncrement;
       }
       else if (sub->varsNamed.subAction == EDITSUBACTION_DURATION)
-        curStep->duration -= 5;
+        curStep->duration --;
 
       curStep->duration = max(curStep->duration, 0);
       curStep->targetTemp = max(curStep->targetTemp, 0);
@@ -946,12 +953,3 @@ void loop()
   delay(100);
   ++s_ticks;
 }
-
-
-
-
-
-
-
-
-

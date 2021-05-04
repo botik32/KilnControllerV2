@@ -241,23 +241,19 @@ enum MenuItems
 };
 
 
-union EditSubmenu	// maps into vars[MAX_STEPS]
+struct EditSubmenuVars	// maps into char* SubMenu::vars
 {
-  struct
-  {
-    char nextAction; // add/remove/edit
-    char subAction;	// for add/edit, it is edit of step type, target temperature and time to reach
-    bool executingAction; // whether executing action above
-    short  stepsCount;	// count of steps stored
-    struct TemperatureStep steps[MAX_STEPS];	
-  } 
-  varsNamed;
+  char   nextAction; // add/remove/edit
+  char   subAction;	// for add/edit, it is edit of step type, target temperature and time to reach
+  bool   executingAction; // whether executing action above
+  short  stepsCount;	// count of steps stored
+  struct TemperatureStep steps[MAX_STEPS];	
 };
 
 struct SubMenu
 {
   short stepId;
-  char vars[sizeof(EditSubmenu)];    // NOTE: make sure to provide enough space to fit all submenu types
+  char *vars = NULL;
 };
 
 enum EditSubmenuActions
@@ -278,6 +274,7 @@ enum EditSubmenuSubActions
 struct Menu
 {
   int submenuId;
+  struct EditSubmenuVars submenuEditSteps;
   struct SubMenu subMenus[MENUITEMS_SIZE];
 };
 
@@ -438,35 +435,35 @@ void getCurrentMessage(struct Menu * menu, char **lines)
     break;	
   case MENU_EDITSTEPS:
     {
-      EditSubmenu * sub = (EditSubmenu*)menu->subMenus[menu->submenuId].vars;
+      EditSubmenuVars * vars = (EditSubmenuVars*)menu->subMenus[MENU_EDITSTEPS].vars;
       short stepId = menu->subMenus[MENU_EDITSTEPS].stepId;
-      short stepToDisplay = min(stepId+1, sub->varsNamed.stepsCount);
-      sprintf(buf[0], "[E] %d/%d ", stepToDisplay, sub->varsNamed.stepsCount);
-      strcat(buf[0], s_editActions[(int)sub->varsNamed.nextAction]);
+      short stepToDisplay = min(stepId+1, vars->stepsCount);
+      sprintf(buf[0], "[E] %d/%d ", stepToDisplay, vars->stepsCount);
+      strcat(buf[0], s_editActions[(int)vars->nextAction]);
       fillLine(buf[0]);
       lines[0] = buf[0];
       lines[1] = (char*)"";
       lines[2] = (char*)"";
-      if (!sub->varsNamed.executingAction)
+      if (!vars->executingAction)
       {
         lines[3] = (char*)"M<               >R ";
       }
       else
       {
-        switch(sub->varsNamed.subAction)
+        switch(vars->subAction)
         {
           int ofs;
         case EDITSUBACTION_TYPE:
           sprintf(buf[3], "Type: " );
-          strcat(buf[3], sub->varsNamed.steps[stepId].holdTemp ? "HOLD" : "INCR");
+          strcat(buf[3], vars->steps[stepId].holdTemp ? "HOLD" : "INCR");
           break;
         case EDITSUBACTION_TEMP:
           ofs = sprintf(buf[3], "Tgt Temp: " );
-          sprintf(buf[3]+ofs, "%dC", sub->varsNamed.steps[stepId].targetTemp);
+          sprintf(buf[3]+ofs, "%dC", vars->steps[stepId].targetTemp);
           break;
         case EDITSUBACTION_DURATION:
           ofs = sprintf(buf[3], "Time: " );
-          sprintf(buf[3]+ofs, "%dm", getStepDuration(&sub->varsNamed.steps[stepId]));
+          sprintf(buf[3]+ofs, "%dm", getStepDuration(&vars->steps[stepId]));
           break;
         }
         fillLine(buf[3]);
@@ -525,9 +522,9 @@ void getCurrentMessage(struct Menu * menu, char **lines)
 void activateStepsConfiguration(struct Menu * menu)
 {
   // copy data to s_configuredSteps
-  EditSubmenu * sub = (EditSubmenu*)menu->subMenus[MENU_EDITSTEPS].vars;
-  s_configuredStepsCount = sub->varsNamed.stepsCount;
-  memcpy(s_configuredSteps, sub->varsNamed.steps, sizeof(sub->varsNamed.steps));
+  EditSubmenuVars * vars = (EditSubmenuVars*)menu->subMenus[MENU_EDITSTEPS].vars;
+  s_configuredStepsCount = vars->stepsCount;
+  memcpy(s_configuredSteps, vars->steps, sizeof(vars->steps));
 }
 
 void handleButtonsMonitor(struct Menu * menu, struct ButtonHit buttonHit)
@@ -552,10 +549,10 @@ void handleButtonsMonitor(struct Menu * menu, struct ButtonHit buttonHit)
 
 void handleButtonsEditSteps(struct Menu * menu, struct ButtonHit buttonHit)
 {
-  EditSubmenu * sub = (EditSubmenu*)menu->subMenus[menu->submenuId].vars;
+  EditSubmenuVars * vars = (EditSubmenuVars*)menu->subMenus[menu->submenuId].vars;
   int stepId = menu->subMenus[menu->submenuId].stepId;
 
-  if (!sub->varsNamed.executingAction)
+  if (!vars->executingAction)
   {
     switch(buttonHit.key)
     {
@@ -566,41 +563,41 @@ void handleButtonsEditSteps(struct Menu * menu, struct ButtonHit buttonHit)
       menu->submenuId = MENU_RUNSTEPS;
       break;
     case KEY_UP:
-      --sub->varsNamed.nextAction;
-      if (sub->varsNamed.nextAction <0)
-        sub->varsNamed.nextAction = 2;
+      --vars->nextAction;
+      if (vars->nextAction <0)
+        vars->nextAction = 2;
       break;
     case KEY_DOWN:
-      ++sub->varsNamed.nextAction;
-      if (sub->varsNamed.nextAction >2)
-        sub->varsNamed.nextAction = 0;
+      ++vars->nextAction;
+      if (vars->nextAction >2)
+        vars->nextAction = 0;
       break;
     case KEY_LEFT:
       menu->submenuId = MENU_MONITOR;
       break;
     case KEY_SELECT:
-      if (sub->varsNamed.nextAction == EDITACTION_ADD)
+      if (vars->nextAction == EDITACTION_ADD)
       {
-        ++sub->varsNamed.stepsCount;
-        if (sub->varsNamed.stepsCount > MAX_STEPS)
-          sub->varsNamed.stepsCount = MAX_STEPS;
+        ++vars->stepsCount;
+        if (vars->stepsCount > MAX_STEPS)
+          vars->stepsCount = MAX_STEPS;
         else
         {
-          menu->subMenus[menu->submenuId].stepId = sub->varsNamed.stepsCount-1;
-          sub->varsNamed.subAction = EDITSUBACTION_TYPE;
-          sub->varsNamed.executingAction = true;
+          menu->subMenus[menu->submenuId].stepId = vars->stepsCount-1;
+          vars->subAction = EDITSUBACTION_TYPE;
+          vars->executingAction = true;
         }
       }
-      else if (sub->varsNamed.nextAction == EDITACTION_EDIT)
+      else if (vars->nextAction == EDITACTION_EDIT)
       {
-        sub->varsNamed.executingAction = true;
+        vars->executingAction = true;
       }
-      else if (sub->varsNamed.nextAction == EDITACTION_REMOVE)
+      else if (vars->nextAction == EDITACTION_REMOVE)
       {
-        struct TemperatureStep * stepsArr = sub->varsNamed.steps;
+        struct TemperatureStep * stepsArr = vars->steps;
         int i;
-        sub->varsNamed.stepsCount = max(sub->varsNamed.stepsCount-1, 0);
-        for (i=stepId; i < sub->varsNamed.stepsCount; ++i)
+        vars->stepsCount = max(vars->stepsCount-1, 0);
+        for (i=stepId; i < vars->stepsCount; ++i)
         {
           // move stuff
           memcpy(&stepsArr[i], &stepsArr[i+1], sizeof(TemperatureStep));
@@ -610,7 +607,7 @@ void handleButtonsEditSteps(struct Menu * menu, struct ButtonHit buttonHit)
           memset(&stepsArr[i], 0, sizeof(TemperatureStep));
         }
 
-        stepId = min(stepId, sub->varsNamed.stepsCount-1);
+        stepId = min(stepId, vars->stepsCount-1);
         menu->subMenus[menu->submenuId].stepId = stepId;
         activateStepsConfiguration(menu);
       }
@@ -620,20 +617,20 @@ void handleButtonsEditSteps(struct Menu * menu, struct ButtonHit buttonHit)
       break;
     }
   }
-  else if (sub->varsNamed.nextAction == EDITACTION_ADD ||
-    sub->varsNamed.nextAction == EDITACTION_EDIT)
+  else if (vars->nextAction == EDITACTION_ADD ||
+    vars->nextAction == EDITACTION_EDIT)
   {
     static int s_tempIncrement = 5, s_tempIncrementIdx = 0;
     static int s_tempIncrements[4] = { 
       5, 10, 50, 100             };
 
-    struct TemperatureStep * curStep = &sub->varsNamed.steps[stepId];
+    struct TemperatureStep * curStep = &vars->steps[stepId];
     switch(buttonHit.key)
     {
     case KEY_UP:
-      if (sub->varsNamed.subAction == EDITSUBACTION_TYPE)
+      if (vars->subAction == EDITSUBACTION_TYPE)
         curStep->holdTemp = !curStep->holdTemp;
-      else if (sub->varsNamed.subAction == EDITSUBACTION_TEMP)
+      else if (vars->subAction == EDITSUBACTION_TEMP)
       {
         if (buttonHit.action & ACTION_LONGCLICK && s_tempIncrementIdx < 3)
         {
@@ -642,14 +639,14 @@ void handleButtonsEditSteps(struct Menu * menu, struct ButtonHit buttonHit)
         }
         curStep->targetTemp += s_tempIncrement;
       }
-      else if (sub->varsNamed.subAction == EDITSUBACTION_DURATION)
+      else if (vars->subAction == EDITSUBACTION_DURATION)
         curStep->duration ++;
 
       break;
     case KEY_DOWN:
-      if (sub->varsNamed.subAction == EDITSUBACTION_TYPE)
+      if (vars->subAction == EDITSUBACTION_TYPE)
         curStep->holdTemp = !curStep->holdTemp;
-      else if (sub->varsNamed.subAction == EDITSUBACTION_TEMP)
+      else if (vars->subAction == EDITSUBACTION_TEMP)
       {
         if (buttonHit.action & ACTION_LONGCLICK && s_tempIncrementIdx > 0)
         {
@@ -658,7 +655,7 @@ void handleButtonsEditSteps(struct Menu * menu, struct ButtonHit buttonHit)
         }
         curStep->targetTemp -= s_tempIncrement;
       }
-      else if (sub->varsNamed.subAction == EDITSUBACTION_DURATION)
+      else if (vars->subAction == EDITSUBACTION_DURATION)
         curStep->duration --;
 
       curStep->duration = max(curStep->duration, 0);
@@ -666,15 +663,15 @@ void handleButtonsEditSteps(struct Menu * menu, struct ButtonHit buttonHit)
 
       break;
     case KEY_RIGHT:
-      if (sub->varsNamed.nextAction == EDITACTION_EDIT)
+      if (vars->nextAction == EDITACTION_EDIT)
       {
         // move to next step
-        if (stepId < sub->varsNamed.stepsCount-1)
+        if (stepId < vars->stepsCount-1)
           ++menu->subMenus[menu->submenuId].stepId;
       }
       break;
     case KEY_LEFT:
-      if (sub->varsNamed.nextAction == EDITACTION_EDIT)
+      if (vars->nextAction == EDITACTION_EDIT)
       {
         // move to prev step
         if (stepId > 0)
@@ -686,13 +683,13 @@ void handleButtonsEditSteps(struct Menu * menu, struct ButtonHit buttonHit)
       {
         // save values and exit
         activateStepsConfiguration(menu);
-        sub->varsNamed.executingAction = false;
+        vars->executingAction = false;
       }
       else
       {
-        ++sub->varsNamed.subAction;
-        if (sub->varsNamed.subAction >2)
-          sub->varsNamed.subAction = 0;
+        ++vars->subAction;
+        if (vars->subAction >2)
+          vars->subAction = 0;
       }
       break;
     default:
@@ -755,18 +752,17 @@ void resetMenuMonitor(struct SubMenu *item)
 void resetMenuEditSteps(struct SubMenu *item)
 {
   int i;
-
+  EditSubmenuVars * vars = (EditSubmenuVars*)item->vars;
   item->stepId = 0;
-  EditSubmenu * sub = (EditSubmenu*)item->vars;
-  sub->varsNamed.stepsCount = 0;
-  sub->varsNamed.nextAction = 0;
-  sub->varsNamed.executingAction = false;
+  vars->stepsCount = 0;
+  vars->nextAction = 0;
+  vars->executingAction = false;
 
   for (i=0; i<MAX_STEPS; ++i)
   {
-    sub->varsNamed.steps[i].targetTemp = 0;
-    sub->varsNamed.steps[i].duration = 0;
-    sub->varsNamed.steps[i].holdTemp = true;
+    vars->steps[i].targetTemp = 0;
+    vars->steps[i].duration = 0;
+    vars->steps[i].holdTemp = true;
   }
 }
 
@@ -822,6 +818,17 @@ MAX6675 ktc2(ktc2_CLK, ktc2_CS, ktc2_SO);
 struct Menu menu;
 
 
+void setupMenu()
+{
+  menu.subMenus[MENU_EDITSTEPS].vars = (char*)&menu.submenuEditSteps;
+  Serial.print("setupMenu: editSteps vars=");
+  char buf[30];
+  sprintf(buf, "%p", menu.subMenus[MENU_EDITSTEPS].vars);
+  Serial.println(buf);
+  Serial.println("Resetting menu.");
+  resetMenu(&menu);
+}
+
 void setup()
 { 
   Serial.begin(9600);
@@ -832,7 +839,7 @@ void setup()
 
   lcd.init();
   lcd.backlight();
-  resetMenu(&menu);
+  setupMenu();
   resetSteps(&s_configuredSteps[0]);
 }
 

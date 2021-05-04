@@ -821,10 +821,6 @@ struct Menu menu;
 void setupMenu()
 {
   menu.subMenus[MENU_EDITSTEPS].vars = (char*)&menu.submenuEditSteps;
-  Serial.print("setupMenu: editSteps vars=");
-  char buf[30];
-  sprintf(buf, "%p", menu.subMenus[MENU_EDITSTEPS].vars);
-  Serial.println(buf);
   Serial.println("Resetting menu.");
   resetMenu(&menu);
 }

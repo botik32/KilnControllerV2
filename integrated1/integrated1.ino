@@ -191,17 +191,25 @@ struct PID
   float tempIncrementRate; // computed increase rate for INCR mode
   float startTemp;         // starting temperature for INC mode
   unsigned long ticksRunning;
-  static const float P_RATIO = 0.2f;
-  static const float I_RATIO = 0.0001f;
-  static const float D_RATIO = 100.f;	// inertia compensation: 
-					// depends on how far the sensor is from the coil
-  static const float D_RATIO_NEG = 20.f;// smaller when temperature is decreasing.
+  static const float P_RATIO;
+  static const float I_RATIO;
+  static const float D_RATIO;  // inertia compensation:
+			       // depends on how far the sensor is from the coil
+  static const float D_RATIO_NEG;// smaller when temperature is decreasing.
 };
+
+const float PID::P_RATIO = 0.2f;
+const float PID::I_RATIO = 0.0001f;
+const float PID::D_RATIO = 100.f;   // inertia compensation:
+                                    // depends on how far the sensor is from the coil
+const float PID::D_RATIO_NEG = 20.f;// smaller when temperature is decreasing.
+
 struct PID s_PID;
 
+const int SSRPIN = 3;
 void initSSR()
 {
-  pinMode(3, OUTPUT);
+  pinMode(SSRPIN, OUTPUT);
 }
 
 void toggleSSR(uint8_t value)
@@ -213,7 +221,7 @@ void toggleSSR(uint8_t value)
     Serial.println(buf);
   }
 
-  digitalWrite(3, value);
+  digitalWrite(SSRPIN, value);
   s_PID.heatOn = (value == HIGH);
 }
 
@@ -437,7 +445,7 @@ void getCurrentMessage(struct Menu * menu, char **lines)
     {
       EditSubmenuVars * vars = (EditSubmenuVars*)menu->subMenus[MENU_EDITSTEPS].vars;
       short stepId = menu->subMenus[MENU_EDITSTEPS].stepId;
-      short stepToDisplay = min(stepId+1, vars->stepsCount);
+      short stepToDisplay = min((short)(stepId+1), vars->stepsCount);
       sprintf(buf[0], "[E] %d/%d ", stepToDisplay, vars->stepsCount);
       strcat(buf[0], s_editActions[(int)vars->nextAction]);
       fillLine(buf[0]);
@@ -563,9 +571,13 @@ void handleButtonsEditSteps(struct Menu * menu, struct ButtonHit buttonHit)
       menu->submenuId = MENU_RUNSTEPS;
       break;
     case KEY_UP:
-      --vars->nextAction;
-      if (vars->nextAction <0)
-        vars->nextAction = 2;
+      {
+        int intNextAction = vars->nextAction;
+        --intNextAction;
+        if (intNextAction <0)
+          intNextAction = 2;
+        vars->nextAction = intNextAction;
+      }
       break;
     case KEY_DOWN:
       ++vars->nextAction;
@@ -658,8 +670,9 @@ void handleButtonsEditSteps(struct Menu * menu, struct ButtonHit buttonHit)
       else if (vars->subAction == EDITSUBACTION_DURATION)
         curStep->duration --;
 
-      curStep->duration = max(curStep->duration, 0);
-      curStep->targetTemp = max(curStep->targetTemp, 0);
+      curStep->duration = max(curStep->duration, (unsigned char)0);
+      curStep->targetTemp = max(curStep->targetTemp, (short)0);
+
 
       break;
     case KEY_RIGHT:
